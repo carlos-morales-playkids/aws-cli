@@ -133,8 +133,8 @@ class TestS3TransferHandler(unittest.TestCase):
         for _ in range(num_transfers):
             fileinfos.append(
                 FileInfo(src='sourcebucket/sourcekey', dest='bucket/key',
-                         compare_key='key',
-                         operation_name='copy'))
+                         compare_key='key', operation_name='copy',
+                         sync_object=True))
 
         self.s3_transfer_handler.call(fileinfos)
         self.assertEqual(
@@ -612,7 +612,9 @@ class TestCopyRequestSubmitter(BaseTransferRequestSubmitterTest):
     def test_submit(self):
         fileinfo = FileInfo(
             src=self.source_bucket+'/'+self.source_key,
-            dest=self.bucket+'/'+self.key)
+            dest=self.bucket+'/'+self.key,
+            sync_object=True
+        )
         self.cli_params['guess_mime_type'] = True  # Default settings
         future = self.transfer_request_submitter.submit(fileinfo)
         self.assertIs(self.transfer_manager.copy.return_value, future)
@@ -638,7 +640,9 @@ class TestCopyRequestSubmitter(BaseTransferRequestSubmitterTest):
     def test_submit_with_extra_args(self):
         fileinfo = FileInfo(
             src=self.source_bucket+'/'+self.source_key,
-            dest=self.bucket+'/'+self.key)
+            dest=self.bucket+'/'+self.key,
+            sync_object=True
+        )
         # Set some extra argument like storage_class to make sure cli
         # params get mapped to request parameters.
         self.cli_params['storage_class'] = 'STANDARD_IA'
@@ -651,7 +655,9 @@ class TestCopyRequestSubmitter(BaseTransferRequestSubmitterTest):
     def test_submit_when_content_type_specified(self):
         fileinfo = FileInfo(
             src=self.source_bucket+'/'+self.source_key,
-            dest=self.bucket+'/'+self.key)
+            dest=self.bucket+'/'+self.key,
+            sync_object=True
+        )
         self.cli_params['content_type'] = 'text/plain'
         self.transfer_request_submitter.submit(fileinfo)
 
@@ -670,7 +676,9 @@ class TestCopyRequestSubmitter(BaseTransferRequestSubmitterTest):
     def test_submit_when_no_guess_content_mime_type(self):
         fileinfo = FileInfo(
             src=self.source_bucket+'/'+self.source_key,
-            dest=self.bucket+'/'+self.key)
+            dest=self.bucket+'/'+self.key,
+            sync_object=True
+        )
         self.cli_params['guess_mime_type'] = False
         self.transfer_request_submitter.submit(fileinfo)
 
@@ -717,7 +725,8 @@ class TestCopyRequestSubmitter(BaseTransferRequestSubmitterTest):
             associated_response_data={
                 'StorageClass': 'GLACIER',
                 'Restore': 'ongoing-request="false"'
-            }
+            },
+            sync_object=True
         )
         future = self.transfer_request_submitter.submit(fileinfo)
         self.assertIs(self.transfer_manager.copy.return_value, future)
@@ -737,7 +746,8 @@ class TestCopyRequestSubmitter(BaseTransferRequestSubmitterTest):
             operation_name='copy',
             associated_response_data={
                 'StorageClass': 'GLACIER',
-            }
+            },
+            sync_object=True
         )
         future = self.transfer_request_submitter.submit(fileinfo)
         self.assertIs(self.transfer_manager.copy.return_value, future)
@@ -788,7 +798,9 @@ class TestCopyRequestSubmitter(BaseTransferRequestSubmitterTest):
     def test_submit_move_adds_delete_source_subscriber(self):
         fileinfo = FileInfo(
             dest=self.source_bucket + '/' + self.source_key,
-            src=self.bucket + '/' + self.key)
+            src=self.bucket + '/' + self.key,
+            sync_object=True
+        )
         self.cli_params['guess_mime_type'] = True  # Default settings
         self.cli_params['is_move'] = True
         self.transfer_request_submitter.submit(fileinfo)

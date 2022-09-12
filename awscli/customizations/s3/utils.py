@@ -12,6 +12,7 @@
 # language governing permissions and limitations under the License.
 import argparse
 import logging
+import sys
 from datetime import datetime
 import mimetypes
 import errno
@@ -23,6 +24,7 @@ from collections import namedtuple, deque
 from dateutil.parser import parse
 from dateutil.tz import tzlocal, tzutc
 from s3transfer.subscribers import BaseSubscriber
+from botocore.exceptions import ClientError
 
 from awscli.compat import bytes_print
 from awscli.compat import queue
@@ -404,7 +406,7 @@ class BucketLister(object):
         self._date_parser = date_parser
 
     def list_objects(self, bucket, prefix=None, page_size=None,
-                     extra_args=None):
+                     extra_args=None, include_acl=True):
         kwargs = {'Bucket': bucket, 'PaginationConfig': {'PageSize': page_size}}
         if prefix is not None:
             kwargs['Prefix'] = prefix
@@ -416,9 +418,24 @@ class BucketLister(object):
         for page in pages:
             contents = page.get('Contents', [])
             for content in contents:
-                source_path = bucket + '/' + content['Key']
+                key = content['Key']
+                source_path = bucket + '/' + key
                 content['LastModified'] = self._date_parser(
                     content['LastModified'])
+                is_folder = key.endswith('/') and content['Size'] == 0
+                if include_acl and not is_folder:
+                    try:
+                        acl_response = self._client.get_object_acl(Bucket=bucket, Key=key)
+                        content['acl'] = {
+                            'Owner': acl_response.get('Owner', {}),
+                            'Grants': acl_response.get('Grants', [])
+                        }
+                    except ClientError:
+                        content['acl'] = None
+                        print(f'Error to obtain de ACL from {bucket}/{key}', file=sys.stderr)
+
+                else:
+                    content['acl'] = None
                 yield source_path, content
 
 
@@ -796,3 +813,44 @@ class NonSeekableStream(object):
             return self._fileobj.read()
         else:
             return self._fileobj.read(amt)
+
+
+def separate_owner_grants(grants, owner_id):
+    """
+    Separate the owner grant from the other grants
+
+    :type grants: list
+    :param grants: list of grants
+
+    :type owner_id: str
+    :param owner_id: owner ID
+
+    :return the list of owner grants and a list of other grants
+    """
+    owner_grants, other_grants = [], []
+    for grant in grants:
+        if grant.get('Grantee', {}).get('ID', '') == owner_id:
+            owner_grants.append(grant)
+        else:
+            other_grants.append(grant)
+    return owner_grants, other_grants
+
+
+def aws_future_to_python_future(aws_future, executor):
+    """
+    Transform an AWS S3Transfer TransferFuture into a Python Future
+
+    :type aws_future: s3transfer.futures.TransferFuture
+    :param aws_future: The aws transfer future
+
+    :type executor: concurrent.futures.Executor
+    :param executor: The executor to submit the python future
+
+    :rtype: concurrent.futures.Future
+    :return: The python future
+    """
+    def _await_result():
+        while not aws_future.done():
+            time.sleep(1)
+        return aws_future.result()
+    return executor.submit(_await_result)

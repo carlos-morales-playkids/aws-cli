@@ -527,7 +527,8 @@ class CommandArchitectureTest(BaseAWSCommandParamsTest):
                   'paths_type': 'locals3', 'region': 'us-east-1',
                   'endpoint_url': None, 'verify_ssl': None,
                   'follow_symlinks': True, 'page_size': None,
-                  'is_stream': False, 'source_region': 'us-west-2'}
+                  'is_stream': False, 'source_region': 'us-west-2',
+                  'copy_acl': False}
         self.parsed_responses = [
             {"CommonPrefixes": [], "Contents": [
                 {"Key": "text1.txt", "Size": 100,

@@ -45,6 +45,9 @@ class FileInfoBuilder(object):
         file_info_attr['parameters'] = self._parameters
         file_info_attr['is_stream'] = self._is_stream
         file_info_attr['associated_response_data'] = file_base.response_data
+        file_info_attr['associated_acl_response_data'] = file_base.acl_response_data
+        file_info_attr['sync_object'] = file_base.sync_object
+        file_info_attr['sync_acl'] = file_base.sync_acl
 
         # This is a bit quirky. The below conditional hinges on the --delete
         # flag being set, which only occurs during a sync command. The source

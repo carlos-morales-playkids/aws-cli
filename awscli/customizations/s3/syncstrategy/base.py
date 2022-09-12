@@ -11,12 +11,24 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 import logging
+from operator import itemgetter
+from awscli.customizations.s3.utils import separate_owner_grants
 
 
 LOG = logging.getLogger(__name__)
 
 VALID_SYNC_TYPES = ['file_at_src_and_dest', 'file_not_at_dest',
                     'file_not_at_src']
+
+
+class SyncResponse:
+    """Response of sync determination"""
+    def __init__(self, sync_object, sync_acl=False):
+        self.sync_object = sync_object
+        self.sync_acl = sync_acl
+
+    def __bool__(self):
+        return self.sync_object or self.sync_acl
 
 
 class BaseSync(object):
@@ -62,6 +74,8 @@ class BaseSync(object):
         """
         self._check_sync_type(sync_type)
         self._sync_type = sync_type
+        # Indicate the use of the ACL
+        self.include_acl = False
 
     def _check_sync_type(self, sync_type):
         if sync_type not in VALID_SYNC_TYPES:
@@ -81,6 +95,9 @@ class BaseSync(object):
         session.register('choosing-s3-sync-strategy', self.use_sync_strategy)
 
     def determine_should_sync(self, src_file, dest_file):
+        return self._determine_should_sync(src_file, dest_file, self.include_acl)
+
+    def _determine_should_sync(self, src_file, dest_file, include_acl):
         """Subclasses should implement this method.
 
         This function takes two ``FileStat`` objects (one from the source and
@@ -102,7 +119,10 @@ class BaseSync(object):
             performed on a specific file existing in the destination. Note if
             the file does not exist at the destination, ``dest_file`` is None.
 
-        :rtype: Boolean
+        :type include_acl: bool
+        :param bool include_acl: Indicate if the acl must be considered.
+
+        :rtype: SyncResponse
         :return: True if an operation based on the ``FileStat`` should be
             allowed to occur.
             False if if an operation based on the ``FileStat`` should not be
@@ -222,35 +242,77 @@ class BaseSync(object):
                 # is newer than the source.
                 return False
 
+    def compare_acl(self, src_file, dest_file):
+        """"""
+        if not src_file.acl_response_data or not dest_file.acl_response_data:
+            return True
+
+        getter = itemgetter('Owner', 'Grants')
+        src_owner, src_grants = getter(src_file.acl_response_data)
+        dest_owner, dest_grants = getter(dest_file.acl_response_data)
+        src_owner_grants, src_other_grants = \
+            separate_owner_grants(src_grants, src_owner['ID'])
+        dest_owner_grants, dest_other_grants = \
+            separate_owner_grants(dest_grants, dest_owner['ID'])
+
+        are_equal = False
+        # comparing owner permissions
+        if src_owner_grants and dest_owner_grants:
+            are_equal = len(src_owner_grants) == len(dest_owner_grants)
+            if are_equal:
+                src_owner_grants.sort(key=lambda x: x.get('Permission', ''))
+                dest_owner_grants.sort(key=lambda x: x.get('Permission', ''))
+                for i in range(len(src_owner_grants)):
+                    src_permission = src_owner_grants[i].get('Permission', '')
+                    dest_permission =  dest_owner_grants[i].get('Permission', '')
+                    are_equal = src_permission == dest_permission
+                    if not are_equal:
+                        break
+        # comparing other permissions
+        if are_equal:
+            are_equal = len(src_other_grants) == len(dest_other_grants)
+            if are_equal:
+                for grant in src_other_grants:
+                    are_equal = grant in dest_other_grants
+                    if not are_equal:
+                        break
+
+        return are_equal
+
+
 
 class SizeAndLastModifiedSync(BaseSync):
 
-    def determine_should_sync(self, src_file, dest_file):
+    def _determine_should_sync(self, src_file, dest_file, include_acl):
         same_size = self.compare_size(src_file, dest_file)
         same_last_modified_time = self.compare_time(src_file, dest_file)
-        should_sync = (not same_size) or (not same_last_modified_time)
-        if should_sync:
+        object_should_sync = (not same_size) or (not same_last_modified_time)
+        if object_should_sync:
             LOG.debug(
                 "syncing: %s -> %s, size: %s -> %s, modified time: %s -> %s",
                 src_file.src, src_file.dest,
                 src_file.size, dest_file.size,
                 src_file.last_update, dest_file.last_update)
-        return should_sync
+        acl_should_sync = False
+        if include_acl:
+            same_acl = self.compare_acl(src_file, dest_file)
+            acl_should_sync = not same_acl
+        return SyncResponse(object_should_sync, acl_should_sync)
 
 
 class NeverSync(BaseSync):
     def __init__(self, sync_type='file_not_at_src'):
         super(NeverSync, self).__init__(sync_type)
 
-    def determine_should_sync(self, src_file, dest_file):
-        return False
+    def _determine_should_sync(self, src_file, dest_file, include_acl):
+        return SyncResponse(sync_object=False, sync_acl=False)
 
 
 class MissingFileSync(BaseSync):
     def __init__(self, sync_type='file_not_at_dest'):
         super(MissingFileSync, self).__init__(sync_type)
 
-    def determine_should_sync(self, src_file, dest_file):
+    def _determine_should_sync(self, src_file, dest_file, include_acl):
         LOG.debug("syncing: %s -> %s, file does not exist at destination",
                   src_file.src, src_file.dest)
-        return True
+        return SyncResponse(sync_object=True, sync_acl=include_acl)

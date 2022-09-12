@@ -12,8 +12,7 @@
 # language governing permissions and limitations under the License.
 import logging
 
-from awscli.customizations.s3.syncstrategy.base import BaseSync
-
+from awscli.customizations.s3.syncstrategy.base import BaseSync, SyncResponse
 
 LOG = logging.getLogger(__name__)
 
@@ -28,10 +27,10 @@ class SizeOnlySync(BaseSync):
 
     ARGUMENT = SIZE_ONLY
 
-    def determine_should_sync(self, src_file, dest_file):
+    def _determine_should_sync(self, src_file, dest_file, include_acl):
         same_size = self.compare_size(src_file, dest_file)
-        should_sync = not same_size
-        if should_sync:
+        object_should_sync = not same_size
+        if object_should_sync:
             LOG.debug("syncing: %s -> %s, size_changed: %s",
                       src_file.src, src_file.dest, not same_size)
-        return should_sync
+        return SyncResponse(sync_object=object_should_sync, sync_acl=include_acl)

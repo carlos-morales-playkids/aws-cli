@@ -42,7 +42,8 @@ class FileInfo(object):
                  last_update=None, src_type=None, dest_type=None,
                  operation_name=None, client=None, parameters=None,
                  source_client=None, is_stream=False,
-                 associated_response_data=None):
+                 associated_response_data=None, associated_acl_response_data=None,
+                 sync_object=False, sync_acl=False):
         self.src = src
         self.src_type = src_type
         self.operation_name = operation_name
@@ -59,6 +60,10 @@ class FileInfo(object):
         self.source_client = source_client
         self.is_stream = is_stream
         self.associated_response_data = associated_response_data
+        self.associated_acl_response_data = associated_acl_response_data
+        # Indicates what we need to sync
+        self.sync_object = sync_object
+        self.sync_acl = sync_acl
 
     def is_glacier_compatible(self):
         """Determines if a file info object is glacier compatible

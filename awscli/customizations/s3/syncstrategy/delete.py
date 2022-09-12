@@ -12,7 +12,7 @@
 # language governing permissions and limitations under the License.
 import logging
 
-from awscli.customizations.s3.syncstrategy.base import BaseSync
+from awscli.customizations.s3.syncstrategy.base import BaseSync, SyncResponse
 
 
 LOG = logging.getLogger(__name__)
@@ -28,9 +28,9 @@ class DeleteSync(BaseSync):
 
     ARGUMENT = DELETE
 
-    def determine_should_sync(self, src_file, dest_file):
+    def _determine_should_sync(self, src_file, dest_file, include_acl):
         dest_file.operation_name = 'delete'
         LOG.debug("syncing: (None) -> %s (remove), file does not "
                   "exist at source (%s) and delete mode enabled",
                   dest_file.src, dest_file.dest)
-        return True
+        return SyncResponse(sync_object=True, sync_acl=False)

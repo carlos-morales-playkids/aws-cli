@@ -429,6 +429,11 @@ REQUEST_PAYER = {
     )
 }
 
+COPY_ACL = {
+    'name': 'copy-acl', 'action': 'store_true',
+    'help_text': 'Copy the ACLs from source object to target object'
+}
+
 TRANSFER_ARGS = [DRYRUN, QUIET, INCLUDE, EXCLUDE, ACL,
                  FOLLOW_SYMLINKS, NO_FOLLOW_SYMLINKS, NO_GUESS_MIME_TYPE,
                  SSE, SSE_C, SSE_C_KEY, SSE_KMS_KEY_ID, SSE_C_COPY_SOURCE,
@@ -761,7 +766,7 @@ class SyncCommand(S3TransferCommand):
             "<LocalPath> or <S3Uri> <S3Uri>"
     ARG_TABLE = [{'name': 'paths', 'nargs': 2, 'positional_arg': True,
                   'synopsis': USAGE}] + TRANSFER_ARGS + \
-                [METADATA, METADATA_DIRECTIVE]
+                [METADATA, METADATA_DIRECTIVE, COPY_ACL]
 
 
 class MbCommand(S3Command):
@@ -937,6 +942,10 @@ class CommandArchitecture(object):
                     sync_type += '_sync_strategy'
                     sync_strategies[sync_type] = override_sync_strategy
 
+        if self.parameters.get('copy_acl'):
+            for sync_strategy in sync_strategies:
+                sync_strategies[sync_strategy].include_acl = self.parameters['copy_acl']
+
         return sync_strategies
 
     def run(self):
@@ -976,17 +985,20 @@ class CommandArchitecture(object):
         result_queue = queue.Queue()
         operation_name = cmd_translation[paths_type]
 
+        include_acl = self.parameters.get('copy_acl', False)
+        # Only 'sync' subcommand have copy-acl argument
+
         fgen_kwargs = {
             'client': self._source_client, 'operation_name': operation_name,
             'follow_symlinks': self.parameters['follow_symlinks'],
             'page_size': self.parameters['page_size'],
-            'result_queue': result_queue,
+            'result_queue': result_queue, 'include_acl': include_acl,
         }
         rgen_kwargs = {
             'client': self._client, 'operation_name': '',
             'follow_symlinks': self.parameters['follow_symlinks'],
             'page_size': self.parameters['page_size'],
-            'result_queue': result_queue,
+            'result_queue': result_queue, 'include_acl': include_acl,
         }
 
         fgen_request_parameters = \

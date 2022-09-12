@@ -95,7 +95,8 @@ class FileDecodingError(Exception):
 class FileStat(object):
     def __init__(self, src, dest=None, compare_key=None, size=None,
                  last_update=None, src_type=None, dest_type=None,
-                 operation_name=None, response_data=None):
+                 operation_name=None, response_data=None,
+                 acl_response_data=None):
         self.src = src
         self.dest = dest
         self.compare_key = compare_key
@@ -105,6 +106,11 @@ class FileStat(object):
         self.dest_type = dest_type
         self.operation_name = operation_name
         self.response_data = response_data
+        self.acl_response_data = acl_response_data
+
+        # Indicates what we need to sync, they will be updated on comparator
+        self.sync_object = False
+        self.sync_acl = False
 
 
 class FileGenerator(object):
@@ -116,7 +122,8 @@ class FileGenerator(object):
     ``FileInfo`` objects to send to a ``Comparator`` or ``S3Handler``.
     """
     def __init__(self, client, operation_name, follow_symlinks=True,
-                 page_size=None, result_queue=None, request_parameters=None):
+                 page_size=None, result_queue=None, request_parameters=None,
+                 include_acl=False):
         self._client = client
         self.operation_name = operation_name
         self.follow_symlinks = follow_symlinks
@@ -127,6 +134,7 @@ class FileGenerator(object):
         self.request_parameters = {}
         if request_parameters is not None:
             self.request_parameters = request_parameters
+        self.include_acl = include_acl
 
     def call(self, files):
         """
@@ -158,6 +166,9 @@ class FileGenerator(object):
         # and ListObject
         if src_type == 's3':
             file_stat_kwargs['response_data'] = extra_information
+            if extra_information.get('acl'):
+                file_stat_kwargs['acl_response_data'] = extra_information['acl']
+                del file_stat_kwargs['response_data']['acl']
 
     def list_files(self, path, dir_op):
         """
@@ -321,7 +332,8 @@ class FileGenerator(object):
             extra_args = self.request_parameters.get('ListObjectsV2', {})
             for key in lister.list_objects(bucket=bucket, prefix=prefix,
                                            page_size=self.page_size,
-                                           extra_args=extra_args):
+                                           extra_args=extra_args,
+                                           include_acl=self.include_acl):
                 source_path, response_data = key
                 if response_data['Size'] == 0 and source_path.endswith('/'):
                     if self.operation_name == 'delete':

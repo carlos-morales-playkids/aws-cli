@@ -98,31 +98,43 @@ class Comparator(object):
                         src_file, dest_file
                     )
                     if should_sync:
+                        src_file.sync_object = should_sync.sync_object
+                        src_file.sync_acl = should_sync.sync_acl
                         yield src_file
                 elif compare_keys == 'less_than':
                     src_take = True
                     dest_take = False
-                    should_sync = self._not_at_dest_sync_strategy.determine_should_sync(src_file, None)
+                    should_sync = \
+                        self._not_at_dest_sync_strategy.determine_should_sync(src_file, None)
                     if should_sync:
+                        src_file.sync_object = should_sync.sync_object
+                        src_file.sync_acl = should_sync.sync_acl
                         yield src_file
 
                 elif compare_keys == 'greater_than':
                     src_take = False
                     dest_take = True
-                    should_sync = self._not_at_src_sync_strategy.determine_should_sync(None, dest_file)
+                    should_sync = \
+                        self._not_at_src_sync_strategy.determine_should_sync(None, dest_file)
                     if should_sync:
+                        dest_file.sync_object = should_sync.sync_object
+                        dest_file.sync_acl = should_sync.sync_acl
                         yield dest_file
 
             elif (not src_done) and dest_done:
                 src_take = True
                 should_sync = self._not_at_dest_sync_strategy.determine_should_sync(src_file, None)
                 if should_sync:
+                    src_file.sync_object = should_sync.sync_object
+                    src_file.sync_acl = should_sync.sync_acl
                     yield src_file
 
             elif src_done and (not dest_done):
                 dest_take = True
                 should_sync = self._not_at_src_sync_strategy.determine_should_sync(None, dest_file)
                 if should_sync:
+                    dest_file.sync_object = should_sync.sync_object
+                    dest_file.sync_acl = should_sync.sync_acl
                     yield dest_file
             else:
                 break

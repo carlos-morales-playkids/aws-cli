@@ -17,6 +17,7 @@ from awscli.testutils import mock
 
 from awscli.customizations.s3.comparator import Comparator
 from awscli.customizations.s3.filegenerator import FileStat
+from awscli.customizations.s3.syncstrategy.base import SyncResponse
 
 
 class ComparatorTest(unittest.TestCase):
@@ -34,7 +35,8 @@ class ComparatorTest(unittest.TestCase):
         is equal to the destination compare key.
         """
         # Try when the sync strategy says not to sync the file.
-        self.sync_strategy.determine_should_sync.return_value = False
+        self.sync_strategy.determine_should_sync.return_value = \
+            SyncResponse(sync_object=False, sync_acl=False)
 
         src_files = []
         dest_files = []
@@ -57,7 +59,8 @@ class ComparatorTest(unittest.TestCase):
         self.assertEqual(result_list, ref_list)
 
         # Try when the sync strategy says to sync the file.
-        self.sync_strategy.determine_should_sync.return_value = True
+        self.sync_strategy.determine_should_sync.return_value = \
+            SyncResponse(sync_object=True, sync_acl=False)
 
         ref_list = []
         result_list = []
@@ -72,10 +75,12 @@ class ComparatorTest(unittest.TestCase):
         Confirm the appropriate action is taken when the soruce compare key
         is less than the destination compare key.
         """
-        self.not_at_src_sync_strategy.determine_should_sync.return_value = False
+        self.not_at_src_sync_strategy.determine_should_sync.return_value = \
+            SyncResponse(sync_object=False, sync_acl=False)
 
         # Try when the sync strategy says to sync the file.
-        self.not_at_dest_sync_strategy.determine_should_sync.return_value = True
+        self.not_at_dest_sync_strategy.determine_should_sync.return_value = \
+            SyncResponse(sync_object=True, sync_acl=False)
 
         src_files = []
         dest_files = []
@@ -113,10 +118,12 @@ class ComparatorTest(unittest.TestCase):
         Confirm the appropriate action is taken when the soruce compare key
         is greater than the destination compare key.
         """
-        self.not_at_dest_sync_strategy.determine_should_sync.return_value = False
+        self.not_at_dest_sync_strategy.determine_should_sync.return_value = \
+            SyncResponse(sync_object=False, sync_acl=False)
 
         # Try when the sync strategy says to sync the file.
-        self.not_at_src_sync_strategy.determine_should_sync.return_value = True
+        self.not_at_src_sync_strategy.determine_should_sync.return_value = \
+            SyncResponse(sync_object=True, sync_acl=False)
 
         src_files = []
         dest_files = []
@@ -140,7 +147,8 @@ class ComparatorTest(unittest.TestCase):
         self.assertEqual(result_list, ref_list)
 
         # Now try when the sync strategy says not to sync the file.
-        self.not_at_src_sync_strategy.determine_should_sync.return_value = False
+        self.not_at_src_sync_strategy.determine_should_sync.return_value = \
+            SyncResponse(sync_object=False, sync_acl=False)
         result_list = []
         ref_list = []
         files = self.comparator.call(iter(src_files), iter(dest_files))
@@ -155,7 +163,8 @@ class ComparatorTest(unittest.TestCase):
         files to take.
         """
         # Try when the sync strategy says to sync the file.
-        self.not_at_src_sync_strategy.determine_should_sync.return_value = True
+        self.not_at_src_sync_strategy.determine_should_sync.return_value = \
+            SyncResponse(sync_object=True, sync_acl=False)
 
         src_files = []
         dest_files = []
@@ -174,7 +183,8 @@ class ComparatorTest(unittest.TestCase):
         self.assertEqual(result_list, ref_list)
 
         # Now try when the sync strategy says not to sync the file.
-        self.not_at_src_sync_strategy.determine_should_sync.return_value = False
+        self.not_at_src_sync_strategy.determine_should_sync.return_value = \
+            SyncResponse(sync_object=False, sync_acl=False)
         result_list = []
         ref_list = []
         files = self.comparator.call(iter(src_files), iter(dest_files))
@@ -188,7 +198,8 @@ class ComparatorTest(unittest.TestCase):
         files to take.
         """
         # Try when the sync strategy says to sync the file.
-        self.not_at_dest_sync_strategy.determine_should_sync.return_value = True
+        self.not_at_dest_sync_strategy.determine_should_sync.return_value = \
+            SyncResponse(sync_object=True, sync_acl=False)
 
         src_files = []
         dest_files = []
@@ -207,7 +218,8 @@ class ComparatorTest(unittest.TestCase):
         self.assertEqual(result_list, ref_list)
 
         # Now try when the sync strategy says not to sync the file.
-        self.not_at_dest_sync_strategy.determine_should_sync.return_value = False
+        self.not_at_dest_sync_strategy.determine_should_sync.return_value = \
+            SyncResponse(sync_object=False, sync_acl=False)
         result_list = []
         ref_list = []
         files = self.comparator.call(iter(src_files), iter(dest_files))

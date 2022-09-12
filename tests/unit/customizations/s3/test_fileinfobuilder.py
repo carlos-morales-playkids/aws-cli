@@ -23,11 +23,16 @@ class TestFileInfoBuilder(unittest.TestCase):
                                       source_client='source_client',
                                       parameters='parameters',
                                       is_stream='is_stream')
-        files = [FileStat(src='src', dest='dest', compare_key='compare_key',
-                          size='size', last_update='last_update',
-                          src_type='src_type', dest_type='dest_type',
-                          operation_name='operation_name',
-                          response_data='associated_response_data')]
+        file_stat = FileStat(src='src', dest='dest', compare_key='compare_key',
+                             size='size', last_update='last_update',
+                             src_type='src_type', dest_type='dest_type',
+                             operation_name='operation_name',
+                             response_data='associated_response_data',
+                             acl_response_data='associated_acl_response_data')
+        file_stat.sync_object = 'sync_object'
+        file_stat.sync_acl = 'sync_acl'
+
+        files = [file_stat]
         file_infos = info_setter.call(files)
         for file_info in file_infos:
             attributes = file_info.__dict__.keys()

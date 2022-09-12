@@ -12,6 +12,9 @@
 # language governing permissions and limitations under the License.
 import logging
 import os
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 
 from s3transfer.manager import TransferManager
 
@@ -46,6 +49,8 @@ from awscli.customizations.s3.utils import DirectoryCreatorSubscriber
 from awscli.customizations.s3.utils import DeleteSourceFileSubscriber
 from awscli.customizations.s3.utils import DeleteSourceObjectSubscriber
 from awscli.customizations.s3.utils import DeleteCopySourceObjectSubscriber
+from awscli.customizations.s3.utils import separate_owner_grants
+from awscli.customizations.s3.utils import aws_future_to_python_future
 from awscli.compat import get_binary_stdin
 
 
@@ -426,6 +431,8 @@ class CopyRequestSubmitter(BaseTransferRequestSubmitter):
     REQUEST_MAPPER_METHOD = RequestParamsMapper.map_copy_object_params
     RESULT_SUBSCRIBER_CLASS = CopyResultSubscriber
 
+    _EXECUTOR = ThreadPoolExecutor()
+
     def can_submit(self, fileinfo):
         return fileinfo.operation_name == 'copy'
 
@@ -439,13 +446,54 @@ class CopyRequestSubmitter(BaseTransferRequestSubmitter):
 
     def _submit_transfer_request(self, fileinfo, extra_args, subscribers):
         bucket, key = find_bucket_key(fileinfo.dest)
-        source_bucket, source_key = find_bucket_key(fileinfo.src)
-        copy_source = {'Bucket': source_bucket, 'Key': source_key}
-        return self._transfer_manager.copy(
-            bucket=bucket, key=key, copy_source=copy_source,
-            extra_args=extra_args, subscribers=subscribers,
-            source_client=fileinfo.source_client
+        response = None
+        if fileinfo.sync_object:
+            source_bucket, source_key = find_bucket_key(fileinfo.src)
+            copy_source = {'Bucket': source_bucket, 'Key': source_key}
+            response = self._transfer_manager.copy(
+                bucket=bucket, key=key, copy_source=copy_source,
+                extra_args=extra_args, subscribers=subscribers,
+                source_client=fileinfo.source_client
+            )
+
+        if fileinfo.sync_acl:
+            if response:
+                sync_response = aws_future_to_python_future(response, self._EXECUTOR)
+                sync_response.add_done_callback(lambda _: self._sync_acl(bucket, key, fileinfo))
+            else:
+                copy_acl_response = self._EXECUTOR.submit(self._sync_acl, bucket, key, fileinfo)
+                response = copy_acl_response
+
+        return response
+
+    def _sync_acl(self, bucket, key, fileinfo):
+        print(f'sync: ACL from {fileinfo.src} to {fileinfo.dest} ...')
+        current_acl = self._transfer_manager.client.get_object_acl(Bucket=bucket, Key=key)
+        acl = self._build_acl(current_acl, fileinfo.associated_acl_response_data)
+        return self._transfer_manager.client.put_object_acl(
+            Bucket=bucket, Key=key, AccessControlPolicy=acl
         )
+
+    def _build_acl(self, current_acl, src_acl):
+        if not src_acl:
+            print(f'Error: src ACL is not supplied. src_acl = {src_acl}', file=sys.stderr)
+            return {'Owner': current_acl.get('Owner', {}), 'Grants': current_acl.get('Grants', [])}
+
+        current_owner = current_acl.get('Owner', {})
+        current_owner_id = current_owner.get('ID', '')
+        src_owner_id = src_acl.get('Owner', {}).get('ID', '')
+
+        src_owner_grants, src_other_grants = \
+            separate_owner_grants(src_acl.get('Grants', []), src_owner_id)
+        current_owner_grants, _ = \
+            separate_owner_grants(current_acl.get('Grants', []), current_owner_id)
+
+        current_owner_grant = next(iter(current_owner_grants), {})
+        new_owner_grants = [deepcopy(current_owner_grant) for i in range(len(src_owner_grants))]
+        for i, grant in enumerate(src_owner_grants):
+            new_owner_grants[i]['Permission'] = grant.get('Permission', '')
+        grants = new_owner_grants + src_other_grants
+        return {'Owner': current_owner, 'Grants': grants}
 
     def _get_warning_handlers(self):
         return [self._warn_glacier]
